@@ -305,7 +305,7 @@ function renderLogin() {
         <p class="sub">A shared reading room for our club. Enter your name to step in.</p>
         <input id="nameInput" type="text" placeholder="Your name" autocomplete="off" />
         <button class="primary" id="enterBtn">Enter the collective</button>
-        <p class="note">Prototype login — single shared entry for now, individual accounts coming later.</p>
+        <p class="note">Single shared entry for now, individual accounts coming later.</p>
       </div>
     </div>`;
 }
