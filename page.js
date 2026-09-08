@@ -78,8 +78,11 @@ const activities = [
 
 const SPINE_PALETTE = ["#8B3A3A", "#4A6B4E", "#8B5E2C", "#5C4A8B", "#2C5E7A", "#7A5C3B"];
 
+// Admin-controlled dashboard highlight. memberId null = auto-pick (newest badge earner / newest member).
+let highlight = { memberId: null, note: "" };
+
 // Pristine copy of the seed data, captured before any edits — used by the admin "reset" action.
-const SEED_DATA = JSON.parse(JSON.stringify({ members, currentBook, pastBooks, meetings, announcements, activities }));
+const SEED_DATA = JSON.parse(JSON.stringify({ members, currentBook, pastBooks, meetings, announcements, activities, highlight }));
 
 const STATUS_META = {
   present: { label: "Present", cls: "active-present" },
@@ -100,7 +103,27 @@ const TABS = [
 // no backend, this is a basic deterrent, not real security — anyone who opens
 // this file in a text editor can see it. Treat it like a "staff only" sign, not a lock.
 const ADMIN_PIN = "2468";
-const STORAGE_KEY = "pageCollectiveData";
+
+// Firebase project config — from Firebase console → Project settings → Your apps.
+const firebaseConfig = {
+  apiKey: "AIzaSyA-tDnKpn3ORBVb9DozYyANQMc5jPl4bIg",
+  authDomain: "thepagecollective-c3223.firebaseapp.com",
+  projectId: "thepagecollective-c3223",
+  storageBucket: "thepagecollective-c3223.firebasestorage.app",
+  messagingSenderId: "134967577675",
+  appId: "1:134967577675:web:efc68c8415a9e2f01cd1ce",
+  measurementId: "G-RRLHHRQYPX",
+};
+let db = null;
+let stateDocRef = null;
+try {
+  if (typeof firebase === "undefined") throw new Error("Firebase SDK did not load (check your internet connection or the script tags in index.html)");
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+  stateDocRef = db.collection("pageCollective").doc("state");
+} catch (e) {
+  console.error("Firebase unavailable — running on local sample data only, changes won't sync:", e);
+}
 
 /* -------------------------------------------------------------
    APP STATE
@@ -115,36 +138,49 @@ let adminPinError = false;
 let showFinishBookForm = false;
 
 /* -------------------------------------------------------------
-   PERSISTENCE (browser localStorage)
+   PERSISTENCE (Firebase Firestore — shared live across all devices)
 ------------------------------------------------------------- */
 
-function loadState() {
-  let raw;
-  try {
-    raw = localStorage.getItem(STORAGE_KEY);
-  } catch (e) {
-    return;
-  }
-  if (!raw) return;
-  try {
-    const data = JSON.parse(raw);
-    if (data.members) { members.length = 0; members.push(...data.members); }
-    if (data.meetings) { meetings.length = 0; meetings.push(...data.meetings); }
-    if (data.currentBook) Object.assign(currentBook, data.currentBook);
-    if (data.pastBooks) { pastBooks.length = 0; pastBooks.push(...data.pastBooks); }
-    if (data.announcements) { announcements.length = 0; announcements.push(...data.announcements); }
-    if (data.activities) { activities.length = 0; activities.push(...data.activities); }
-  } catch (e) {
-    console.error("Could not load saved club data:", e);
-  }
+// True while we're applying data that just arrived from Firestore, so we
+// don't immediately re-save it and cause a feedback loop.
+let isApplyingRemoteUpdate = false;
+
+function applyRemoteData(data) {
+  isApplyingRemoteUpdate = true;
+  if (data.members) { members.length = 0; members.push(...data.members); }
+  if (data.meetings) { meetings.length = 0; meetings.push(...data.meetings); }
+  if (data.currentBook) Object.assign(currentBook, data.currentBook);
+  if (data.pastBooks) { pastBooks.length = 0; pastBooks.push(...data.pastBooks); }
+  if (data.announcements) { announcements.length = 0; announcements.push(...data.announcements); }
+  if (data.activities) { activities.length = 0; activities.push(...data.activities); }
+  if (data.highlight) Object.assign(highlight, data.highlight);
+  isApplyingRemoteUpdate = false;
+  render();
+}
+
+// Subscribes to the shared document — fires immediately with current data,
+// then again automatically whenever any device saves a change.
+function subscribeToState() {
+  if (!stateDocRef) return; // Firebase failed to initialize — stay on local sample data
+  stateDocRef.onSnapshot(
+    (snap) => {
+      if (snap.exists) applyRemoteData(snap.data());
+      // If it doesn't exist yet, nobody has saved anything to Firestore
+      // yet — keep showing the sample data baked into this file until
+      // the first admin edit creates the shared document.
+    },
+    (err) => {
+      console.error("Could not sync club data from Firebase:", err);
+    }
+  );
 }
 
 function saveState() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ members, meetings, currentBook, pastBooks, announcements, activities }));
-  } catch (e) {
-    console.error("Could not save club data:", e);
-  }
+  if (isApplyingRemoteUpdate) return; // don't re-save data we just received
+  if (!stateDocRef) return; // Firebase unavailable — edits stay local to this tab only
+  stateDocRef
+    .set({ members, meetings, currentBook, pastBooks, announcements, activities, highlight })
+    .catch((e) => console.error("Could not save club data to Firebase:", e));
 }
 
 function resetAllData() {
@@ -156,6 +192,7 @@ function resetAllData() {
   pastBooks.length = 0; pastBooks.push(...fresh.pastBooks);
   announcements.length = 0; announcements.push(...fresh.announcements);
   activities.length = 0; activities.push(...fresh.activities);
+  Object.assign(highlight, fresh.highlight);
   openMeetingId = meetings[0].id;
   saveState();
   render();
@@ -274,9 +311,14 @@ function renderDashboard() {
   const totalBooksThisYear = pastBooks.length + 1;
   const totalPagesRead = pastBooks.length * 380 + members.reduce((s, m) => s + m.progress.pages, 0) / members.length;
   const avgAttendance = Math.round(members.reduce((s, m) => s + (attendancePct(m.id) || 0), 0) / members.length);
-  const recentBadgeEarner =
+  const autoHighlight =
     members.find((m) => m.badges.length > 0 && m.badges[m.badges.length - 1] === "newChapter") ||
     [...members].sort((a, b) => new Date(b.joined) - new Date(a.joined))[0];
+  const manualHighlight = highlight.memberId ? findMember(highlight.memberId) : null;
+  const featuredMember = manualHighlight || autoHighlight;
+  const featuredSub = manualHighlight
+    ? (highlight.note.trim() || "Featured by the admins")
+    : (autoHighlight && autoHighlight.badges.includes("newChapter") ? 'Just earned "New Chapter" 🌱' : "Newest member of the collective");
 
   return `
     <div class="list-gap-lg">
@@ -350,13 +392,13 @@ function renderDashboard() {
 
       <div>
         ${sectionLabelHtml("award", "Member highlight")}
-        ${recentBadgeEarner ? `
+        ${featuredMember ? `
         <div class="card">
           <div class="highlight-row" data-goto-tab="members">
-            ${avatarHtml(recentBadgeEarner.name, 44)}
+            ${avatarHtml(featuredMember.name, 44)}
             <div style="flex:1">
-              <div class="highlight-name">${escapeHtml(recentBadgeEarner.name)}</div>
-              <div class="highlight-sub">${recentBadgeEarner.badges.includes("newChapter") ? 'Just earned "New Chapter" 🌱' : "Newest member of the collective"}</div>
+              <div class="highlight-name">${escapeHtml(featuredMember.name)}</div>
+              <div class="highlight-sub">${escapeHtml(featuredSub)}</div>
             </div>
             <div class="highlight-chevron"><i data-lucide="chevron-right"></i></div>
           </div>
@@ -533,7 +575,7 @@ function renderAttendance() {
     const marked = Object.values(mt.status).filter((s) => s !== null).length;
     const bodyHtml = isOpen ? `
       <div class="meeting-body">
-        <div class="meeting-marked">${marked}/${members.length} marked</div>
+        <div class="meeting-marked">${marked}/${members.length} marked${!adminUnlocked ? " · admins only can edit" : ""}</div>
         ${members.map((m) => `
           <div class="attendee-row">
             ${avatarHtml(m.name, 30)}
@@ -541,8 +583,11 @@ function renderAttendance() {
             <div class="status-btns">
               ${["present", "absent", "excused"].map((s) => {
                 const active = mt.status[m.id] === s;
-                return `<button class="status-btn${active ? " " + STATUS_META[s].cls : ""}" data-status-btn data-meeting="${mt.id}" data-member="${m.id}" data-status="${s}">${STATUS_META[s].label}</button>`;
-              }).join("")}
+                if (adminUnlocked) {
+                  return `<button class="status-btn${active ? " " + STATUS_META[s].cls : ""}" data-status-btn data-meeting="${mt.id}" data-member="${m.id}" data-status="${s}">${STATUS_META[s].label}</button>`;
+                }
+                return active ? `<span class="status-btn ${STATUS_META[s].cls}" style="cursor:default">${STATUS_META[s].label}</span>` : "";
+              }).join("") || (adminUnlocked ? "" : `<span style="font-size:10.5px;color:rgba(239,230,211,0.35)">Not marked</span>`)}
             </div>
           </div>`).join("")}
       </div>` : "";
@@ -574,6 +619,7 @@ function renderAttendance() {
 
   return `
     <div class="list-gap-lg">
+      ${!adminUnlocked ? `<p style="font-size:12px;color:var(--sage);margin:0">Attendance is marked by admins. This view is read-only.</p>` : ""}
       <div>
         ${sectionLabelHtml("calendar-check", "Meetings")}
         <div class="list-gap">${meetingCards}</div>
@@ -810,6 +856,20 @@ function renderAdminPanel() {
       <button class="primary" style="width:100%;padding:10px;font-size:13.5px;border-radius:6px;border:none;background:var(--brass);color:#1B140A;font-weight:600" data-admin-add-activity>Add activity</button>
     </div>`;
 
+  const highlightSection = `
+    <div class="card">
+      <label class="step-label">FEATURED MEMBER
+        <select id="admin-highlight-member" class="admin-input" style="margin-top:4px">
+          <option value="">Automatic (newest badge / newest member)</option>
+          ${members.map((m) => `<option value="${m.id}"${highlight.memberId === m.id ? " selected" : ""}>${escapeHtml(m.name)}</option>`).join("")}
+        </select>
+      </label>
+      <label class="step-label" style="display:block;margin-top:10px">CUSTOM MESSAGE (optional)
+        <input id="admin-highlight-note" type="text" value="${escapeHtml(highlight.note || "")}" placeholder="e.g. Read 3 books this month!" class="admin-input" style="margin-top:4px" />
+      </label>
+      <button class="primary" style="width:100%;padding:10px;font-size:13.5px;border-radius:6px;border:none;background:var(--brass);color:#1B140A;font-weight:600;margin-top:10px" data-admin-save-highlight>Save highlight</button>
+    </div>`;
+
   const dangerZone = `
     <div class="card" style="border-color:rgba(139,58,58,0.4)">
       <div class="eyebrow" style="color:var(--wine);margin-bottom:8px">DANGER ZONE</div>
@@ -828,6 +888,11 @@ function renderAdminPanel() {
         ${sectionLabelHtml("users", "Manage members")}
         <div class="list-gap">${memberRows}</div>
         ${addMemberForm}
+      </div>
+
+      <div>
+        ${sectionLabelHtml("award", "Dashboard highlight")}
+        ${highlightSection}
       </div>
 
       <div>
@@ -1073,6 +1138,16 @@ function removeMember(id) {
   members.splice(members.findIndex((x) => x.id === id), 1);
   meetings.forEach((mt) => { delete mt.status[id]; });
   if (selectedMemberId === id) selectedMemberId = null;
+  if (highlight.memberId === id) highlight.memberId = null;
+  saveState();
+  render();
+}
+
+function saveHighlight() {
+  const select = document.getElementById("admin-highlight-member");
+  const noteInput = document.getElementById("admin-highlight-note");
+  highlight.memberId = select.value ? Number(select.value) : null;
+  highlight.note = noteInput.value.trim();
   saveState();
   render();
 }
@@ -1306,6 +1381,9 @@ document.addEventListener("click", (e) => {
   const addMemberBtn = e.target.closest("[data-admin-add-member]");
   if (addMemberBtn) { addMember(); return; }
 
+  const saveHighlightBtn = e.target.closest("[data-admin-save-highlight]");
+  if (saveHighlightBtn) { saveHighlight(); return; }
+
   const toggleBadgeBtn = e.target.closest("[data-admin-toggle-badge]");
   if (toggleBadgeBtn) {
     const [memberId, key] = toggleBadgeBtn.dataset.adminToggleBadge.split(":");
@@ -1363,5 +1441,5 @@ document.addEventListener("keydown", (e) => {
    INIT
 ------------------------------------------------------------- */
 
-loadState();
 render();
+subscribeToState();
