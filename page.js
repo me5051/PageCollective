@@ -21,7 +21,7 @@ let members = [
   { id: 4, name: "Daniella", role: "Photographer", joined: "2024-07-18", points: 300, booksCompleted: 2, progress: { percent: 55, chapter: 1, pages: 2, totalPages: 166 }, badges: [] },
   { id: 5, name: "Bhig Vic", role: "Content Chemist", joined: "2025-07-18", points: 300, booksCompleted: 2, progress: { percent: 40, chapter: 1, pages: 2, totalPages: 166 }, badges: [] },
   { id: 6, name: "Ray", role: "Social Media Manager", joined: "2025-07-18", points: 300, booksCompleted: 2, progress: { percent: 22, chapter: 1, pages: 2, totalPages: 166 }, badges: ["pageTurner"] },
-  { id: 7, name: "Victor William", role: "Secretary", joined: "2025-07-18", points: 300, booksCompleted: 2, progress: { percent: 30, chapter: 1, pages: 2, totalPages: 166 }, badges: [] },
+  { id: 7, name: "Victor William", role: "Member", joined: "2025-07-18", points: 300, booksCompleted: 2, progress: { percent: 30, chapter: 1, pages: 2, totalPages: 166 }, badges: [] },
   { id: 8, name: "Caspar", role: "Member", joined: "2026-07-18", points: 300, booksCompleted: 2, progress: { percent: 10, chapter: 1, pages: 2, totalPages: 166 }, badges: ["newChapter"] },
   { id: 9, name: "Smile Socials", role: "Member", joined: "2026-07-18", points: 300, booksCompleted: 2, progress: { percent: 10, chapter: 1, pages: 2, totalPages: 166 }, badges: ["newChapter"] },
   { id: 10, name: "Louis Malachi", role: "Member", joined: "2026-07-18", points: 300, booksCompleted: 2, progress: { percent: 10, chapter: 1, pages: 2, totalPages: 166 }, badges: ["newChapter"] },
@@ -39,11 +39,12 @@ const currentBook = {
   targetDate: "2026-09-19",
   spineColor: "#8B3A3A",
   cover: "cover-beautiful-ones.jpg",
+  pdfLink: null,
 };
 
 const pastBooks = [
-  { title: "The Atomic Habits", author: "James Clear", finished: "2026-08-08", rating: 4.6, spineColor: "#4A6B4E", cover: "cover-atomic-habits.jpg" },
-  { title: "The Alchemist", author: "Paulo Coelho", finished: "2026-08-29", rating: 4.8, spineColor: "#8B5E2C", cover: "cover-alchemist.jpg" },
+  { title: "The Atomic Habits", author: "James Clear", finished: "2026-08-08", rating: 4.6, spineColor: "#4A6B4E", cover: "cover-atomic-habits.jpg", pdfLink: null },
+  { title: "The Alchemist", author: "Paulo Coelho", finished: "2026-08-29", rating: 4.8, spineColor: "#8B5E2C", cover: "cover-alchemist.jpg", pdfLink: null },
 ];
 
 let meetings = [
@@ -81,8 +82,11 @@ const SPINE_PALETTE = ["#8B3A3A", "#4A6B4E", "#8B5E2C", "#5C4A8B", "#2C5E7A", "#
 // Admin-controlled dashboard highlight. memberId null = auto-pick (newest badge earner / newest member).
 let highlight = { memberId: null, note: "" };
 
+// Next-book poll. Each option's votes array holds member IDs who voted for it.
+let poll = { active: false, question: "Vote for our next book!", options: [] };
+
 // Pristine copy of the seed data, captured before any edits — used by the admin "reset" action.
-const SEED_DATA = JSON.parse(JSON.stringify({ members, currentBook, pastBooks, meetings, announcements, activities, highlight }));
+const SEED_DATA = JSON.parse(JSON.stringify({ members, currentBook, pastBooks, meetings, announcements, activities, highlight, poll }));
 
 const STATUS_META = {
   present: { label: "Present", cls: "active-present" },
@@ -154,6 +158,7 @@ function applyRemoteData(data) {
   if (data.announcements) { announcements.length = 0; announcements.push(...data.announcements); }
   if (data.activities) { activities.length = 0; activities.push(...data.activities); }
   if (data.highlight) Object.assign(highlight, data.highlight);
+  if (data.poll) Object.assign(poll, data.poll);
   isApplyingRemoteUpdate = false;
   render();
 }
@@ -179,7 +184,7 @@ function saveState() {
   if (isApplyingRemoteUpdate) return; // don't re-save data we just received
   if (!stateDocRef) return; // Firebase unavailable — edits stay local to this tab only
   stateDocRef
-    .set({ members, meetings, currentBook, pastBooks, announcements, activities, highlight })
+    .set({ members, meetings, currentBook, pastBooks, announcements, activities, highlight, poll })
     .catch((e) => console.error("Could not save club data to Firebase:", e));
 }
 
@@ -193,6 +198,7 @@ function resetAllData() {
   announcements.length = 0; announcements.push(...fresh.announcements);
   activities.length = 0; activities.push(...fresh.activities);
   Object.assign(highlight, fresh.highlight);
+  Object.assign(poll, fresh.poll);
   openMeetingId = meetings[0].id;
   saveState();
   render();
@@ -244,7 +250,10 @@ function escapeHtml(str) {
    SMALL COMPONENT RENDERERS (return HTML strings)
 ------------------------------------------------------------- */
 
-function avatarHtml(name, size) {
+function avatarHtml(name, size, photo) {
+  if (photo) {
+    return `<div class="avatar" style="width:${size}px;height:${size}px;overflow:hidden;padding:0"><img src="${photo}" alt="${escapeHtml(name)}" style="width:100%;height:100%;object-fit:cover;display:block" /></div>`;
+  }
   const hue = hueForName(name);
   const fontSize = Math.round(size * 0.38);
   return `<div class="avatar" style="width:${size}px;height:${size}px;font-size:${fontSize}px;background:hsl(${hue},32%,30%)">${initials(name)}</div>`;
@@ -296,7 +305,7 @@ function renderLogin() {
         <p class="sub">A shared reading room for our club. Enter your name to step in.</p>
         <input id="nameInput" type="text" placeholder="Your name" autocomplete="off" />
         <button class="primary" id="enterBtn">Enter the collective</button>
-        <p class="note">Shared entry for now, individual accounts coming later.</p>
+        <p class="note">Prototype login — single shared entry for now, individual accounts coming later.</p>
       </div>
     </div>`;
 }
@@ -395,7 +404,7 @@ function renderDashboard() {
         ${featuredMember ? `
         <div class="card">
           <div class="highlight-row" data-goto-tab="members">
-            ${avatarHtml(featuredMember.name, 44)}
+            ${avatarHtml(featuredMember.name, 44, featuredMember.photo)}
             <div style="flex:1">
               <div class="highlight-name">${escapeHtml(featuredMember.name)}</div>
               <div class="highlight-sub">${escapeHtml(featuredSub)}</div>
@@ -417,7 +426,7 @@ function renderMembers() {
     const pct = attendancePct(m.id);
     return `
       <div class="card tight member-row" data-open-member="${m.id}">
-        ${avatarHtml(m.name, 42)}
+        ${avatarHtml(m.name, 42, m.photo)}
         <div style="flex:1;min-width:0">
           <div class="member-name-line">
             <span class="member-name">${escapeHtml(m.name)}</span>
@@ -449,7 +458,7 @@ function renderMemberModal(member) {
   return `
     <div class="modal-close-row" data-close-modal><i data-lucide="x"></i></div>
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">
-      ${avatarHtml(member.name, 58)}
+      ${avatarHtml(member.name, 58, member.photo)}
       <div>
         <div class="serif" style="font-size:20px;font-weight:600;color:var(--parchment)">
           ${escapeHtml(member.name)} ${isYou ? `<span style="font-size:11px;color:var(--brass)">· You</span>` : ""}
@@ -530,7 +539,32 @@ function renderReadingTracker() {
     <div class="history-item">
       ${bookSpineHtml(b.title, b.author, b.spineColor, 80, 116, true, b.cover)}
       <div class="history-rating"><i data-lucide="star" fill="#C08830"></i> ${b.rating}</div>
+      ${b.pdfLink ? `<a href="${b.pdfLink}" target="_blank" rel="noopener" style="font-size:10px;color:var(--brass);text-decoration:none">Read PDF</a>` : ""}
     </div>`).join("");
+
+  
+  const pollSection = poll.active ? `
+    <div>
+      ${sectionLabelHtml("check-square", "Vote for the next book")}
+      <div class="card">
+        <div style="font-family:'Fraunces', serif;font-size:15px;color:var(--parchment);font-weight:600;margin-bottom:12px">${escapeHtml(poll.question)}</div>
+        ${poll.options.length === 0 ? `<p style="font-size:12.5px;color:var(--sage)">No options yet — check back soon.</p>` : poll.options.map((opt) => {
+          const totalVotes = poll.options.reduce((s, o) => s + o.votes.length, 0);
+          const pct = totalVotes ? Math.round((opt.votes.length / totalVotes) * 100) : 0;
+          const yourVote = you && opt.votes.includes(you.id);
+          return `
+            <div style="margin-bottom:12px;${you ? "cursor:pointer" : ""}" ${you ? `data-vote-option="${opt.id}"` : ""}>
+              <div class="flex-between" style="margin-bottom:4px">
+                <span style="font-size:13px;color:${yourVote ? "var(--brass)" : "var(--parchment)"};font-weight:${yourVote ? "600" : "400"}">${yourVote ? "✓ " : ""}${escapeHtml(opt.title)}</span>
+                <span style="font-size:11.5px;color:var(--sage)">${opt.votes.length} vote${opt.votes.length === 1 ? "" : "s"} · ${pct}%</span>
+              </div>
+              <div style="font-size:11px;color:var(--sage);margin-bottom:5px">${escapeHtml(opt.author)}</div>
+              ${progressBarHtml(pct, { size: "thin" })}
+            </div>`;
+        }).join("")}
+        ${!you && poll.options.length > 0 ? `<p style="font-size:11.5px;color:rgba(239,230,211,0.4);margin-top:4px">Log in with your member name to vote.</p>` : ""}
+      </div>
+    </div>` : "";
 
   return `
     <div class="list-gap-lg">
@@ -546,10 +580,13 @@ function renderReadingTracker() {
                 ${currentBook.totalPages} pages · ${currentBook.totalChapters} chapters<br />
                 Started ${fmtDate(currentBook.startDate)} · Target ${fmtDate(currentBook.targetDate)}
               </div>
+              ${currentBook.pdfLink ? `<a href="${currentBook.pdfLink}" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;font-size:12px;color:var(--brass)">📄 Read the PDF</a>` : ""}
             </div>
           </div>
         </div>
       </div>
+
+      ${pollSection}
 
       ${yourSection}
 
@@ -578,7 +615,7 @@ function renderAttendance() {
         <div class="meeting-marked">${marked}/${members.length} marked${!adminUnlocked ? " · admins only can edit" : ""}</div>
         ${members.map((m) => `
           <div class="attendee-row">
-            ${avatarHtml(m.name, 30)}
+            ${avatarHtml(m.name, 30, m.photo)}
             <span class="attendee-name">${escapeHtml(m.name)}</span>
             <div class="status-btns">
               ${["present", "absent", "excused"].map((s) => {
@@ -641,7 +678,7 @@ function renderPointsAchievements() {
   const leaderRows = ranked.map((m, i) => `
     <div class="card tight leader-row">
       <div class="leader-rank${i === 0 ? " first" : ""}">${i + 1}</div>
-      ${avatarHtml(m.name, 38)}
+      ${avatarHtml(m.name, 38, m.photo)}
       <div style="flex:1">
         <div class="member-name">${escapeHtml(m.name)}</div>
         <div class="leader-badges">${m.badges.map((b) => `<span>${BADGES[b].icon}</span>`).join("")}</div>
@@ -654,7 +691,7 @@ function renderPointsAchievements() {
     const holders = members.filter((m) => m.badges.includes(key));
     const holdersHtml = holders.length === 0
       ? `<span class="badge-none">Not yet earned</span>`
-      : holders.map((h) => avatarHtml(h.name, 24)).join("");
+      : holders.map((h) => avatarHtml(h.name, 24, h.photo)).join("");
     return `
       <div class="card center">
         <div class="badge-icon">${b.icon}</div>
@@ -714,7 +751,7 @@ function renderAdminPanel() {
   const memberRows = members.map((m) => `
     <div class="card" style="margin-bottom:8px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-        ${avatarHtml(m.name, 34)}
+        ${avatarHtml(m.name, 34, m.photo)}
         <div style="flex:1;min-width:0">
           <div class="member-name">${escapeHtml(m.name)}</div>
           <div class="member-role">${escapeHtml(m.role)}</div>
@@ -727,6 +764,7 @@ function renderAdminPanel() {
         <label class="step-label">CHAPTER<input type="number" id="admin-chapter-${m.id}" value="${m.progress.chapter}" class="admin-input" style="margin-top:4px" /></label>
         <label class="step-label">PAGES<input type="number" id="admin-pages-${m.id}" value="${m.progress.pages}" class="admin-input" style="margin-top:4px" /></label>
       </div>
+      <input type="text" id="admin-photo-${m.id}" value="${escapeHtml(m.photo || "")}" placeholder="Photo URL (optional)" class="admin-input" style="margin-bottom:10px" />
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
         ${Object.entries(BADGES).map(([key, b]) => {
           const active = m.badges.includes(key);
@@ -756,6 +794,7 @@ function renderAdminPanel() {
         <input id="admin-book-target" type="date" value="${currentBook.targetDate}" class="admin-input" />
       </div>
       <input id="admin-book-cover" type="text" value="${escapeHtml(currentBook.cover || "")}" placeholder="Cover image URL or filename (optional)" class="admin-input" style="margin-bottom:8px" />
+      <input id="admin-book-pdf" type="text" value="${escapeHtml(currentBook.pdfLink || "")}" placeholder="PDF/reading link (optional — only share material you have rights to)" class="admin-input" style="margin-bottom:8px" />
       <button class="primary" style="width:100%;padding:10px;font-size:13.5px;border-radius:6px;border:none;background:var(--brass);color:#1B140A;font-weight:600;margin-bottom:10px" data-admin-save-book>Save book details</button>
       <button style="width:100%;padding:9px;border-radius:6px;border:1px solid rgba(239,230,211,0.15);background:transparent;color:var(--sage);font-size:12.5px" data-admin-toggle-finish>${showFinishBookForm ? "Cancel" : "Finish this book & start a new one"}</button>
       ${showFinishBookForm ? `
@@ -771,6 +810,7 @@ function renderAdminPanel() {
             <input id="admin-next-target" type="date" class="admin-input" />
           </div>
           <input id="admin-next-cover" type="text" placeholder="Cover image URL or filename (optional)" class="admin-input" style="margin-bottom:8px" />
+          <input id="admin-next-pdf" type="text" placeholder="PDF/reading link (optional)" class="admin-input" style="margin-bottom:8px" />
           <button class="primary" style="width:100%;padding:10px;font-size:13.5px;border-radius:6px;border:none;background:var(--brass);color:#1B140A;font-weight:600" data-admin-confirm-finish>Archive & start new book</button>
         </div>` : ""}
     </div>`;
@@ -784,9 +824,12 @@ function renderAdminPanel() {
         </div>
         <button class="icon-btn" data-admin-delete-pastbook="${i}"><i data-lucide="trash-2"></i></button>
       </div>
-      <div style="display:flex;gap:6px">
+      <div style="display:flex;gap:6px;margin-bottom:6px">
         <input type="text" id="admin-pastbook-cover-${i}" value="${escapeHtml(b.cover || "")}" placeholder="Cover image URL or filename (optional)" class="admin-input" style="flex:1" />
-        <button class="icon-btn" data-admin-save-pastbook-cover="${i}" title="Save cover" style="border:1px solid rgba(239,230,211,0.15);border-radius:6px;padding:0 10px"><i data-lucide="check"></i></button>
+      </div>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="admin-pastbook-pdf-${i}" value="${escapeHtml(b.pdfLink || "")}" placeholder="PDF/reading link (optional)" class="admin-input" style="flex:1" />
+        <button class="icon-btn" data-admin-save-pastbook-cover="${i}" title="Save" style="border:1px solid rgba(239,230,211,0.15);border-radius:6px;padding:0 10px"><i data-lucide="check"></i></button>
       </div>
     </div>`).join("") || `<p style="font-size:12.5px;color:var(--sage)">No past books yet.</p>`;
 
@@ -800,6 +843,7 @@ function renderAdminPanel() {
         <input id="admin-pastbook-rating" type="number" min="1" max="5" step="0.1" placeholder="Rating" class="admin-input" />
       </div>
       <input id="admin-pastbook-cover" type="text" placeholder="Cover image URL or filename (optional)" class="admin-input" style="margin-bottom:8px" />
+      <input id="admin-pastbook-pdf" type="text" placeholder="PDF/reading link (optional)" class="admin-input" style="margin-bottom:8px" />
       <button class="primary" style="width:100%;padding:10px;font-size:13.5px;border-radius:6px;border:none;background:var(--brass);color:#1B140A;font-weight:600" data-admin-add-pastbook>Add to reading history</button>
     </div>`;
 
@@ -870,6 +914,32 @@ function renderAdminPanel() {
       <button class="primary" style="width:100%;padding:10px;font-size:13.5px;border-radius:6px;border:none;background:var(--brass);color:#1B140A;font-weight:600;margin-top:10px" data-admin-save-highlight>Save highlight</button>
     </div>`;
 
+  const pollOptionRows = poll.options.map((opt) => `
+    <div class="card tight" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:10px">
+      <div style="min-width:0">
+        <div style="font-size:13px;color:var(--parchment)">${escapeHtml(opt.title)}</div>
+        <div style="font-size:11.5px;color:var(--sage)">${escapeHtml(opt.author)} · ${opt.votes.length} vote${opt.votes.length === 1 ? "" : "s"}</div>
+      </div>
+      <button class="icon-btn" data-admin-delete-poll-option="${opt.id}"><i data-lucide="trash-2"></i></button>
+    </div>`).join("") || `<p style="font-size:12.5px;color:var(--sage)">No options yet.</p>`;
+
+  const pollSection = `
+    <div class="card" style="margin-bottom:10px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--parchment);margin-bottom:10px">
+        <input type="checkbox" id="admin-poll-active" ${poll.active ? "checked" : ""} /> Poll is live (members can see and vote)
+      </label>
+      <input id="admin-poll-question" type="text" value="${escapeHtml(poll.question)}" placeholder="Poll question" class="admin-input" style="margin-bottom:8px" />
+      <button class="primary" style="width:100%;padding:9px;font-size:13px;border-radius:6px;border:none;background:var(--brass);color:#1B140A;font-weight:600" data-admin-save-poll-settings>Save poll settings</button>
+    </div>
+    <div class="list-gap">${pollOptionRows}</div>
+    <div class="card" style="margin-top:8px">
+      <div class="eyebrow" style="margin-bottom:8px">ADD OPTION</div>
+      <input id="admin-poll-option-title" type="text" placeholder="Book title" class="admin-input" style="margin-bottom:8px" />
+      <input id="admin-poll-option-author" type="text" placeholder="Author" class="admin-input" style="margin-bottom:8px" />
+      <button class="primary" style="width:100%;padding:10px;font-size:13.5px;border-radius:6px;border:none;background:var(--brass);color:#1B140A;font-weight:600" data-admin-add-poll-option>Add option</button>
+    </div>
+    <button style="width:100%;padding:9px;margin-top:8px;border-radius:6px;border:1px solid rgba(239,230,211,0.15);background:transparent;color:var(--sage);font-size:12.5px" data-admin-reset-poll-votes>Reset all votes</button>`;
+
   const dangerZone = `
     <div class="card" style="border-color:rgba(139,58,58,0.4)">
       <div class="eyebrow" style="color:var(--wine);margin-bottom:8px">DANGER ZONE</div>
@@ -893,6 +963,11 @@ function renderAdminPanel() {
       <div>
         ${sectionLabelHtml("award", "Dashboard highlight")}
         ${highlightSection}
+      </div>
+
+      <div>
+        ${sectionLabelHtml("check-square", "Next-book poll")}
+        ${pollSection}
       </div>
 
       <div>
@@ -1077,6 +1152,19 @@ function stepProgress(field, direction) {
   render();
 }
 
+function voteForOption(optionId) {
+  const you = findYou();
+  if (!you) return;
+  poll.options.forEach((opt) => {
+    const idx = opt.votes.indexOf(you.id);
+    if (idx !== -1) opt.votes.splice(idx, 1);
+  });
+  const target = poll.options.find((o) => o.id === optionId);
+  if (target) target.votes.push(you.id);
+  saveState();
+  render();
+}
+
 /* -------------------------------------------------------------
    ADMIN ACTIONS
 ------------------------------------------------------------- */
@@ -1112,10 +1200,12 @@ function saveMemberEdits(id) {
   const books = document.getElementById(`admin-books-${id}`);
   const chapter = document.getElementById(`admin-chapter-${id}`);
   const pages = document.getElementById(`admin-pages-${id}`);
+  const photo = document.getElementById(`admin-photo-${id}`);
   m.points = Math.max(0, Number(points.value) || 0);
   m.booksCompleted = Math.max(0, Number(books.value) || 0);
   m.progress.chapter = Math.max(0, Math.min(currentBook.totalChapters, Number(chapter.value) || 0));
   m.progress.pages = Math.max(0, Math.min(currentBook.totalPages, Number(pages.value) || 0));
+  m.photo = photo.value.trim() || null;
   recomputePercent(m.progress);
   saveState();
   render();
@@ -1139,6 +1229,10 @@ function removeMember(id) {
   meetings.forEach((mt) => { delete mt.status[id]; });
   if (selectedMemberId === id) selectedMemberId = null;
   if (highlight.memberId === id) highlight.memberId = null;
+  poll.options.forEach((opt) => {
+    const idx = opt.votes.indexOf(id);
+    if (idx !== -1) opt.votes.splice(idx, 1);
+  });
   saveState();
   render();
 }
@@ -1148,6 +1242,44 @@ function saveHighlight() {
   const noteInput = document.getElementById("admin-highlight-note");
   highlight.memberId = select.value ? Number(select.value) : null;
   highlight.note = noteInput.value.trim();
+  saveState();
+  render();
+}
+
+function savePollSettings() {
+  const activeCheckbox = document.getElementById("admin-poll-active");
+  const questionInput = document.getElementById("admin-poll-question");
+  poll.active = activeCheckbox.checked;
+  poll.question = questionInput.value.trim() || "Vote for our next book!";
+  saveState();
+  render();
+}
+
+function addPollOption() {
+  const titleInput = document.getElementById("admin-poll-option-title");
+  const authorInput = document.getElementById("admin-poll-option-author");
+  const title = titleInput.value.trim();
+  const author = authorInput.value.trim();
+  if (!title || !author) return;
+  const newId = poll.options.length ? Math.max(...poll.options.map((o) => o.id)) + 1 : 1;
+  poll.options.push({ id: newId, title, author, votes: [] });
+  titleInput.value = "";
+  authorInput.value = "";
+  saveState();
+  render();
+}
+
+function deletePollOption(id) {
+  const idx = poll.options.findIndex((o) => o.id === id);
+  if (idx === -1) return;
+  poll.options.splice(idx, 1);
+  saveState();
+  render();
+}
+
+function resetPollVotes() {
+  if (!window.confirm("Clear all votes? Options stay, but every vote count resets to zero.")) return;
+  poll.options.forEach((o) => { o.votes = []; });
   saveState();
   render();
 }
@@ -1165,6 +1297,7 @@ function addMember() {
     points: 0, booksCompleted: 0,
     progress: { percent: 0, chapter: 0, pages: 0, totalPages: currentBook.totalPages },
     badges: ["newChapter"],
+    photo: null,
   });
   nameInput.value = "";
   roleInput.value = "";
@@ -1180,8 +1313,9 @@ function saveBookDetails() {
   const startDate = document.getElementById("admin-book-start").value || currentBook.startDate;
   const targetDate = document.getElementById("admin-book-target").value || currentBook.targetDate;
   const cover = document.getElementById("admin-book-cover").value.trim() || null;
+  const pdfLink = document.getElementById("admin-book-pdf").value.trim() || null;
   if (!title || !author) return;
-  Object.assign(currentBook, { title, author, totalPages, totalChapters, startDate, targetDate, cover });
+  Object.assign(currentBook, { title, author, totalPages, totalChapters, startDate, targetDate, cover, pdfLink });
   members.forEach((m) => {
     m.progress.totalPages = totalPages;
     m.progress.chapter = Math.min(m.progress.chapter, totalChapters);
@@ -1209,12 +1343,13 @@ function addPastBookManually() {
   const finished = document.getElementById("admin-pastbook-finished").value;
   const rating = parseFloat(document.getElementById("admin-pastbook-rating").value);
   const cover = document.getElementById("admin-pastbook-cover").value.trim() || null;
+  const pdfLink = document.getElementById("admin-pastbook-pdf").value.trim() || null;
   if (!title || !author || !finished) return;
   pastBooks.unshift({
     title, author, finished,
     rating: isNaN(rating) ? 0 : rating,
     spineColor: SPINE_PALETTE[pastBooks.length % SPINE_PALETTE.length],
-    cover,
+    cover, pdfLink,
   });
   saveState();
   render();
@@ -1223,8 +1358,10 @@ function addPastBookManually() {
 function savePastBookCover(index) {
   const book = pastBooks[index];
   if (!book) return;
-  const input = document.getElementById(`admin-pastbook-cover-${index}`);
-  book.cover = input.value.trim() || null;
+  const coverInput = document.getElementById(`admin-pastbook-cover-${index}`);
+  const pdfInput = document.getElementById(`admin-pastbook-pdf-${index}`);
+  book.cover = coverInput.value.trim() || null;
+  book.pdfLink = pdfInput.value.trim() || null;
   saveState();
   render();
 }
@@ -1238,6 +1375,7 @@ function confirmFinishBook() {
   const startDate = document.getElementById("admin-next-start").value;
   const targetDate = document.getElementById("admin-next-target").value;
   const nextCover = document.getElementById("admin-next-cover").value.trim() || null;
+  const nextPdf = document.getElementById("admin-next-pdf").value.trim() || null;
   if (!title || !author || !totalPages || !totalChapters || !startDate || !targetDate) {
     window.alert("Please fill in every field for the next book before continuing.");
     return;
@@ -1248,11 +1386,13 @@ function confirmFinishBook() {
     rating: isNaN(rating) ? 0 : rating,
     spineColor: currentBook.spineColor,
     cover: currentBook.cover || null,
+    pdfLink: currentBook.pdfLink || null,
   });
   Object.assign(currentBook, {
     title, author, totalPages, totalChapters, startDate, targetDate,
     spineColor: SPINE_PALETTE[pastBooks.length % SPINE_PALETTE.length],
     cover: nextCover,
+    pdfLink: nextPdf,
   });
   members.forEach((m) => {
     m.booksCompleted += 1;
@@ -1366,6 +1506,9 @@ document.addEventListener("click", (e) => {
     return;
   }
 
+  const voteBtn = e.target.closest("[data-vote-option]");
+  if (voteBtn) { voteForOption(Number(voteBtn.dataset.voteOption)); return; }
+
   const adminUnlockBtn = e.target.closest("#adminUnlockBtn");
   if (adminUnlockBtn) { attemptAdminUnlock(); return; }
 
@@ -1383,6 +1526,19 @@ document.addEventListener("click", (e) => {
 
   const saveHighlightBtn = e.target.closest("[data-admin-save-highlight]");
   if (saveHighlightBtn) { saveHighlight(); return; }
+
+  const savePollSettingsBtn = e.target.closest("[data-admin-save-poll-settings]");
+  if (savePollSettingsBtn) { savePollSettings(); return; }
+
+  const addPollOptionBtn = e.target.closest("[data-admin-add-poll-option]");
+  if (addPollOptionBtn) { addPollOption(); return; }
+
+  const deletePollOptionBtn = e.target.closest("[data-admin-delete-poll-option]");
+  if (deletePollOptionBtn) { deletePollOption(Number(deletePollOptionBtn.dataset.adminDeletePollOption)); return; }
+
+  const resetPollVotesBtn = e.target.closest("[data-admin-reset-poll-votes]");
+  if (resetPollVotesBtn) { resetPollVotes(); return; }
+
 
   const toggleBadgeBtn = e.target.closest("[data-admin-toggle-badge]");
   if (toggleBadgeBtn) {
