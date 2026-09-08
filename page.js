@@ -17,11 +17,11 @@ const BADGES = {
 let members = [
   { id: 1, name: "Sage Supreme", role: "President", joined: "2024-07-18", points: 300, booksCompleted: 2, progress: { percent: 84, chapter: 1, pages: 2, totalPages: 166 }, badges: ["pageTurner", "consistent", "mvp"] },
   { id: 2, name: "Kwechi", role: "Vice President", joined: "2024-07-18", points: 300, booksCompleted: 2, progress: { percent: 91, chapter: 1, pages: 2, totalPages: 166 }, badges: ["pageTurner", "discussion"] },
-  { id: 3, name: "Miran Chinemerem", role: "Accountant", joined: "2024-07-18", points: 300, booksCompleted: 2, progress: { percent: 63, chapter: 1, pages: 2, totalPages: 166 }, badges: ["consistent"] },
+  { id: 3, name: "Audrey", role: "Accountant", joined: "2024-07-18", points: 300, booksCompleted: 2, progress: { percent: 63, chapter: 1, pages: 2, totalPages: 166 }, badges: ["consistent"] },
   { id: 4, name: "Daniella", role: "Photographer", joined: "2024-07-18", points: 300, booksCompleted: 2, progress: { percent: 55, chapter: 1, pages: 2, totalPages: 166 }, badges: [] },
   { id: 5, name: "Bhig Vic", role: "Content Chemist", joined: "2025-07-18", points: 300, booksCompleted: 2, progress: { percent: 40, chapter: 1, pages: 2, totalPages: 166 }, badges: [] },
   { id: 6, name: "Ray", role: "Social Media Manager", joined: "2025-07-18", points: 300, booksCompleted: 2, progress: { percent: 22, chapter: 1, pages: 2, totalPages: 166 }, badges: ["pageTurner"] },
-  { id: 7, name: "Victor William", role: "Member", joined: "2025-07-18", points: 300, booksCompleted: 2, progress: { percent: 30, chapter: 1, pages: 2, totalPages: 166 }, badges: [] },
+  { id: 7, name: "Victor William", role: "Secretary", joined: "2025-07-18", points: 300, booksCompleted: 2, progress: { percent: 30, chapter: 1, pages: 2, totalPages: 166 }, badges: [] },
   { id: 8, name: "Caspar", role: "Member", joined: "2026-07-18", points: 300, booksCompleted: 2, progress: { percent: 10, chapter: 1, pages: 2, totalPages: 166 }, badges: ["newChapter"] },
   { id: 9, name: "Smile Socials", role: "Member", joined: "2026-07-18", points: 300, booksCompleted: 2, progress: { percent: 10, chapter: 1, pages: 2, totalPages: 166 }, badges: ["newChapter"] },
   { id: 10, name: "Louis Malachi", role: "Member", joined: "2026-07-18", points: 300, booksCompleted: 2, progress: { percent: 10, chapter: 1, pages: 2, totalPages: 166 }, badges: ["newChapter"] },
@@ -296,7 +296,7 @@ function renderLogin() {
         <p class="sub">A shared reading room for our club. Enter your name to step in.</p>
         <input id="nameInput" type="text" placeholder="Your name" autocomplete="off" />
         <button class="primary" id="enterBtn">Enter the collective</button>
-        <p class="note">Prototype login — single shared entry for now, individual accounts coming later.</p>
+        <p class="note">Shared entry for now, individual accounts coming later.</p>
       </div>
     </div>`;
 }
