@@ -17,7 +17,7 @@ const BADGES = {
 let members = [
   { id: 1, name: "Sage Supreme", role: "President", joined: "2024-07-18", points: 300, booksCompleted: 2, progress: { percent: 84, chapter: 1, pages: 2, totalPages: 166 }, badges: ["pageTurner", "consistent", "mvp"] },
   { id: 2, name: "Kwechi", role: "Vice President", joined: "2024-07-18", points: 300, booksCompleted: 2, progress: { percent: 91, chapter: 1, pages: 2, totalPages: 166 }, badges: ["pageTurner", "discussion"] },
-  { id: 3, name: "Audrey", role: "Accountant", joined: "2024-07-18", points: 300, booksCompleted: 2, progress: { percent: 63, chapter: 1, pages: 2, totalPages: 166 }, badges: ["consistent"] },
+  { id: 3, name: "Miran Chinemerem", role: "Accountant", joined: "2024-07-18", points: 300, booksCompleted: 2, progress: { percent: 63, chapter: 1, pages: 2, totalPages: 166 }, badges: ["consistent"] },
   { id: 4, name: "Daniella", role: "Photographer", joined: "2024-07-18", points: 300, booksCompleted: 2, progress: { percent: 55, chapter: 1, pages: 2, totalPages: 166 }, badges: [] },
   { id: 5, name: "Bhig Vic", role: "Content Chemist", joined: "2025-07-18", points: 300, booksCompleted: 2, progress: { percent: 40, chapter: 1, pages: 2, totalPages: 166 }, badges: [] },
   { id: 6, name: "Ray", role: "Social Media Manager", joined: "2025-07-18", points: 300, booksCompleted: 2, progress: { percent: 22, chapter: 1, pages: 2, totalPages: 166 }, badges: ["pageTurner"] },
@@ -305,7 +305,7 @@ function renderLogin() {
         <p class="sub">A shared reading room for our club. Enter your name to step in.</p>
         <input id="nameInput" type="text" placeholder="Your name" autocomplete="off" />
         <button class="primary" id="enterBtn">Enter the collective</button>
-        <p class="note">Single shared entry for now, individual accounts coming later.</p>
+        <p class="note">Prototype login — single shared entry for now, individual accounts coming later.</p>
       </div>
     </div>`;
 }
@@ -431,6 +431,7 @@ function renderMembers() {
           <div class="member-name-line">
             <span class="member-name">${escapeHtml(m.name)}</span>
             ${isYou ? `<span class="you-tag">YOU</span>` : ""}
+            ${isYou ? `<i data-lucide="pencil" data-rename-self="${m.id}" style="width:13px;height:13px;color:var(--sage);cursor:pointer"></i>` : ""}
           </div>
           <div class="member-role">${escapeHtml(m.role)}</div>
         </div>
@@ -462,6 +463,7 @@ function renderMemberModal(member) {
       <div>
         <div class="serif" style="font-size:20px;font-weight:600;color:var(--parchment)">
           ${escapeHtml(member.name)} ${isYou ? `<span style="font-size:11px;color:var(--brass)">· You</span>` : ""}
+          ${isYou ? `<i data-lucide="pencil" data-rename-self="${member.id}" style="width:14px;height:14px;color:var(--sage);cursor:pointer;margin-left:6px;vertical-align:middle"></i>` : ""}
         </div>
         <div style="font-size:12.5px;color:var(--sage)">${escapeHtml(member.role)}</div>
       </div>
@@ -757,6 +759,10 @@ function renderAdminPanel() {
           <div class="member-role">${escapeHtml(m.role)}</div>
         </div>
         <button class="icon-btn" data-admin-remove-member="${m.id}" title="Remove member"><i data-lucide="trash-2"></i></button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <label class="step-label">NAME<input type="text" id="admin-name-${m.id}" value="${escapeHtml(m.name)}" class="admin-input" style="margin-top:4px" /></label>
+        <label class="step-label">ROLE<input type="text" id="admin-role-${m.id}" value="${escapeHtml(m.role)}" class="admin-input" style="margin-top:4px" /></label>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
         <label class="step-label">POINTS<input type="number" id="admin-points-${m.id}" value="${m.points}" class="admin-input" style="margin-top:4px" /></label>
@@ -1104,6 +1110,24 @@ function attemptLogin() {
   render();
 }
 
+function renameSelf(id) {
+  const m = findMember(id);
+  if (!m) return;
+  const newName = window.prompt("Edit your name:", m.name);
+  if (newName === null) return; // cancelled
+  const trimmed = newName.trim();
+  if (!trimmed || trimmed === m.name) return;
+  const duplicate = members.find((x) => x.id !== id && x.name.toLowerCase() === trimmed.toLowerCase());
+  if (duplicate) {
+    window.alert(`${duplicate.name} already has that name — pick a different one.`);
+    return;
+  }
+  m.name = trimmed;
+  currentUserName = trimmed; // keep "you" matching correct after the rename
+  saveState();
+  render();
+}
+
 function logout() {
   currentUserName = null;
   render();
@@ -1196,17 +1220,35 @@ function recomputePercent(progress) {
 function saveMemberEdits(id) {
   const m = findMember(id);
   if (!m) return;
+  const nameInput = document.getElementById(`admin-name-${id}`);
+  const roleInput = document.getElementById(`admin-role-${id}`);
   const points = document.getElementById(`admin-points-${id}`);
   const books = document.getElementById(`admin-books-${id}`);
   const chapter = document.getElementById(`admin-chapter-${id}`);
   const pages = document.getElementById(`admin-pages-${id}`);
   const photo = document.getElementById(`admin-photo-${id}`);
+  const oldName = m.name;
+  const newName = nameInput.value.trim();
+  if (newName && newName !== oldName) {
+    const duplicate = members.find((x) => x.id !== id && x.name.toLowerCase() === newName.toLowerCase());
+    if (duplicate) {
+      window.alert(`${duplicate.name} already has that name — pick a different one.`);
+    } else {
+      m.name = newName;
+    }
+  }
+  const newRole = roleInput.value.trim();
+  if (newRole) m.role = newRole;
   m.points = Math.max(0, Number(points.value) || 0);
   m.booksCompleted = Math.max(0, Number(books.value) || 0);
   m.progress.chapter = Math.max(0, Math.min(currentBook.totalChapters, Number(chapter.value) || 0));
   m.progress.pages = Math.max(0, Math.min(currentBook.totalPages, Number(pages.value) || 0));
   m.photo = photo.value.trim() || null;
   recomputePercent(m.progress);
+  // if the admin just renamed whoever is currently logged in on this device, keep "you" matching correct
+  if (currentUserName && oldName.toLowerCase() === currentUserName.toLowerCase() && m.name !== oldName) {
+    currentUserName = m.name;
+  }
   saveState();
   render();
 }
@@ -1478,6 +1520,9 @@ document.addEventListener("click", (e) => {
 
   const gotoTab = e.target.closest("[data-goto-tab]");
   if (gotoTab) { setTab(gotoTab.dataset.gotoTab); return; }
+
+  const renameSelfBtn = e.target.closest("[data-rename-self]");
+  if (renameSelfBtn) { renameSelf(Number(renameSelfBtn.dataset.renameSelf)); return; }
 
   const memberRow = e.target.closest("[data-open-member]");
   if (memberRow) { openMemberModal(Number(memberRow.dataset.openMember)); return; }
