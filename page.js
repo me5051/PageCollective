@@ -305,7 +305,7 @@ function renderLogin() {
         <p class="sub">A shared reading room for our club. Enter your name to step in.</p>
         <input id="nameInput" type="text" placeholder="Your name" autocomplete="off" />
         <button class="primary" id="enterBtn">Enter the collective</button>
-        <p class="note">Single shared entry for now, individual accounts coming later.</p>
+        <p class="note">Prototype login — single shared entry for now, individual accounts coming later.</p>
       </div>
     </div>`;
 }
@@ -431,7 +431,6 @@ function renderMembers() {
           <div class="member-name-line">
             <span class="member-name">${escapeHtml(m.name)}</span>
             ${isYou ? `<span class="you-tag">YOU</span>` : ""}
-            ${isYou ? `<i data-lucide="pencil" data-rename-self="${m.id}" style="width:13px;height:13px;color:var(--sage);cursor:pointer"></i>` : ""}
           </div>
           <div class="member-role">${escapeHtml(m.role)}</div>
         </div>
